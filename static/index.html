@@ -13,12 +13,20 @@
         }
     </style>
     <script>
+        var consumeMode = false;
+        var produceMode = false;
+        var consumeSource = undefined;
+
         var tabID = sessionStorage.tabID
             ? sessionStorage.tabID
-            : sessionStorage.tabID = getRandomInt(100, 110)
+            : sessionStorage.tabID = getRandomInt(100, 10000)
 
-        var source;
-
+        /**
+         * Random clientId generator.
+         * @param min
+         * @param max
+         * @returns {number}
+         */
         function getRandomInt(min, max) {
             min = Math.ceil(min);
             max = Math.floor(max);
@@ -30,13 +38,17 @@
          * @param evt
          */
         function mouseMoveEventHandler(evt) {
+            if (!produceMode) {
+                return;
+            }
+
             let data = {
                 x: evt.x,
                 y: evt.y,
                 client: tabID.toString()
             };
 
-            let response = fetch('/send', {
+            fetch('/send', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json;charset=utf-8'
@@ -44,31 +56,60 @@
                 body: JSON.stringify(data)
             }).then(function (response) {
                 let result = response.json();
-                console.log(result);
+                //console.log(result);
             });
         }
 
+        /**
+         * Closes SSE connection to stop consumption.
+         */
+        function closeConsumeSource() {
+            if (consumeSource) {
+                consumeSource.close()
+                consumeSource = undefined;
+            }
+        }
+
+        /**
+         * Opens SSE connection to consume tracked events.
+         */
+        function openConsumeSource() {
+            consumeSource = new EventSource('/recv')
+            consumeSource.onmessage = (event) => {
+                var evt = JSON.parse(event.data);
+                document.getElementById('pointer').style.left = evt.x + 'px';
+                document.getElementById('pointer').style.top = evt.y + 'px';
+            }
+        }
+
         function replayTracked() {
-            if (source) {
-                source.close()
-            }
-            source = new EventSource("/recv")
-            source.onmessage = (event) => {
-                var evt = JSON.parse(event.data)
-                //document.getElementById("replay-container").append(event.data)
-                document.getElementById("pointer").style.left = evt.x + "px"
-                document.getElementById("pointer").style.top = evt.y + "px"
-            }
+            consumeMode = true;
+            produceMode = false;
+
+            closeConsumeSource();
+            openConsumeSource();
+
+            document.getElementById('trackHint').style.display = 'none';
+        }
+
+        function trackEvents() {
+            consumeMode = false;
+            produceMode = true;
+
+            closeConsumeSource();
+
+            document.getElementById('trackHint').style.display = 'inline';
         }
     </script>
 </head>
 <body>
 <div>
     Welcome to event recording!
-    <br/>
-    Please, move mouse to track events...
-    <button onclick="replayTracked()">Replay tracked events</button>
-    <span id="replay-container"></span>
+    <br/><br/>
+    <button id="trackBtn" onclick="trackEvents()">Track events...</button>
+    <span id="trackHint" style="display: none">Please, move mouse to track events...</span>
+    <br/><br/>
+    <button id="replayBtn" onclick="replayTracked()">Replay tracked events...</button>
     <span class="pointer" id="pointer"></span>
 </div>
 <script>

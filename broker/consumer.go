@@ -96,21 +96,15 @@ func (consumer *Consumer) Start(sigterm chan os.Signal, sigusr1 chan os.Signal) 
 		}*/
 
 	go func() {
-		keepRunning := true
-		for keepRunning {
-			select {
-			case <-consumer.close:
-				cancel()
-				wg.Wait()
-				keepRunning = false
-				consumer.logger.Infof("terminating consumer: close call")
-			case <-ctx.Done():
-				keepRunning = false
-				consumer.logger.Infof("terminating consumer: context cancelled")
-			case <-sigterm:
-				keepRunning = false
-				consumer.logger.Infof("terminating consumer: via signal")
-			}
+		select {
+		case <-consumer.close:
+			cancel()
+			wg.Wait()
+			consumer.logger.Infof("terminating consumer: close call")
+		case <-ctx.Done():
+			consumer.logger.Infof("terminating consumer: context cancelled")
+		case <-sigterm:
+			consumer.logger.Infof("terminating consumer: via signal")
 		}
 	}()
 }

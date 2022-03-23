@@ -115,7 +115,11 @@ func (server *Server) pullCoordinatesHandler(w http.ResponseWriter, r *http.Requ
 
 	for {
 		select {
+		case <-r.Context().Done():
+			server.logger.Infof("SSE connection closed")
+			return
 		case coord := <-server.application.Consume.ConsumeOutput():
+			time.Sleep(time.Millisecond * 10)
 			var buf bytes.Buffer
 			enc := json.NewEncoder(&buf)
 			enc.Encode(coord)
@@ -123,7 +127,7 @@ func (server *Server) pullCoordinatesHandler(w http.ResponseWriter, r *http.Requ
 			if f, ok := w.(http.Flusher); ok {
 				f.Flush()
 			}
-			server.logger.Infof("Data sent to sse: %v (%v)", coord, buf)
+			server.logger.Infof("Data sent to SSE response: %v", coord)
 		}
 	}
 }
