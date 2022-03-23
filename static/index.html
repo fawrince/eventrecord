@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Event recording</title>
+    <style>
+        .pointer {
+            position: absolute;
+            width: 5px;
+            height: 5px;
+            border-radius: 2.5px;
+            background-color: red;
+        }
+    </style>
+    <script>
+        var tabID = sessionStorage.tabID
+            ? sessionStorage.tabID
+            : sessionStorage.tabID = getRandomInt(100, 110)
+
+        var source;
+
+        function getRandomInt(min, max) {
+            min = Math.ceil(min);
+            max = Math.floor(max);
+            return Math.floor(Math.random() * (max - min)) + min;
+        }
+
+        /**
+         * Catches a mouse-move event and pushes it to the server.
+         * @param evt
+         */
+        function mouseMoveEventHandler(evt) {
+            let data = {
+                x: evt.x,
+                y: evt.y,
+                client: tabID.toString()
+            };
+
+            let response = fetch('/send', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json;charset=utf-8'
+                },
+                body: JSON.stringify(data)
+            }).then(function (response) {
+                let result = response.json();
+                console.log(result);
+            });
+        }
+
+        function replayTracked() {
+            if (source) {
+                source.close()
+            }
+            source = new EventSource("/recv")
+            source.onmessage = (event) => {
+                var evt = JSON.parse(event.data)
+                //document.getElementById("replay-container").append(event.data)
+                document.getElementById("pointer").style.left = evt.x + "px"
+                document.getElementById("pointer").style.top = evt.y + "px"
+            }
+        }
+    </script>
+</head>
+<body>
+<div>
+    Welcome to event recording!
+    <br/>
+    Please, move mouse to track events...
+    <button onclick="replayTracked()">Replay tracked events</button>
+    <span id="replay-container"></span>
+    <span class="pointer" id="pointer"></span>
+</div>
+<script>
+    document.addEventListener("mousemove", mouseMoveEventHandler)
+</script>
+</body>
+</html>

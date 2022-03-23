@@ -1,0 +1,18 @@
+FROM golang:1.17-alpine AS builder
+
+WORKDIR /temp
+COPY . /temp
+
+RUN go mod download
+
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o executable cmd/server/main.go
+
+FROM scratch
+
+#RUN apk --no-cache add ca-certificates
+
+WORKDIR /server
+COPY --from=builder /temp/executable .
+COPY --from=builder /temp/static ./static
+
+CMD [ "/server/executable", "-httpport", "1001", "-brokers", "broker:9092", "-topics", "coordinates", "-group", "g1", "-verbose", "true" ]

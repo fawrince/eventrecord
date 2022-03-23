@@ -1,0 +1,62 @@
+version: "3"
+services:
+  eventrecord-server:
+    image: eventrecord-server:1.0.0
+    container_name: server
+    ports:
+      - "1001:1001"
+
+#  eventrecord-consumer:
+#    image: eventrecord-consumer:1.0.0
+#    container_name: consumer
+
+#  elasticsearch:
+#    image: "docker.elastic.co/elasticsearch/elasticsearch:7.2.0"
+#    environment:
+#      - "ES_JAVA_OPTS=-Xms1g -Xmx1g"
+#      - "discovery.type=single-node"
+#    ports:
+#      - "9200:9200"
+#    volumes:
+#      - elasticsearch_data:/usr/share/elasticsearch/data
+
+#  kibana:
+#    image: "docker.elastic.co/kibana/kibana:7.2.0"
+#    ports:
+#      - "5601:5601"
+
+#  filebeat:
+#    image: "docker.elastic.co/beats/filebeat:7.2.0"
+#    user: root
+#    volumes:
+#      - ./filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
+#      - /var/lib/docker:/var/lib/docker:ro
+#      - /var/run/docker.sock:/var/run/docker.sock
+
+  zookeeper:
+    image: wurstmeister/zookeeper
+    container_name: zookeeper
+    ports:
+      - "2181:2181"
+    restart: unless-stopped
+
+  kafka:
+    image: wurstmeister/kafka
+    container_name: broker
+    ports:
+      - "9093:9093"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_CREATE_TOPICS: "coordinates:4:1"
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENERS: INTERNAL://broker:9092,EXTERNAL://localhost:9093
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://broker:9092,EXTERNAL://localhost:9093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: unless-stopped
+
+volumes:
+  elasticsearch_data:
+
