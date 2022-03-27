@@ -19,14 +19,13 @@ func init() {
 }
 
 func main() {
-
 	flag.Parse()
 
-	//file, err := os.OpenFile("out.log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
-	//if err != nil {
-	//	log.Fatal("Failed to open out.log")
-	//}
-	//defer file.Close()
+	/*file, err := os.OpenFile("all.log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	if err != nil {
+		log.Fatal("Failed to open out.log")
+	}
+	defer file.Close()*/
 
 	logger := logger.NewLogger(os.Stdout)
 

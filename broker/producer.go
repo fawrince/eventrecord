@@ -24,7 +24,7 @@ func NewProducer(logger *logger.Logger, address string, topic string) *Producer 
 
 // ProduceInput returns the pipelined-channel to produce coordinates
 func (prod *Producer) ProduceInput() chan<- Coordinates {
-	ch := make(chan Coordinates)
+	ch := make(chan Coordinates, 100)
 	go func() {
 		for coordinates := range ch {
 			data, _ := json.Marshal(coordinates)

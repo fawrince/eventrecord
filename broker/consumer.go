@@ -25,7 +25,7 @@ func NewConsumer(logger *logger.Logger) *Consumer {
 		logger: logger,
 		ready:  make(chan bool),
 		close:  make(chan bool),
-		output: make(chan Coordinates),
+		output: make(chan Coordinates, 100),
 	}
 }
 
