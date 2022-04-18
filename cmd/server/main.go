@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"github.com/fawrince/eventrecord/application"
+	"github.com/fawrince/eventrecord/grpc"
 	"github.com/fawrince/eventrecord/http"
 	"github.com/fawrince/eventrecord/logger"
 	"os"
@@ -35,7 +36,11 @@ func main() {
 	srv := http.NewServer(logger, app)
 	srv.Start()
 
+	grpc := grpc.NewCoordinateTransporterServer(app.Produce, logger)
+	grpc.Start()
+
 	<-sigterm
 	srv.Stop()
 	app.Stop()
+	grpc.Stop()
 }

@@ -6,9 +6,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/fawrince/eventrecord/application"
-	"github.com/fawrince/eventrecord/broker"
+	"github.com/fawrince/eventrecord/dto"
 	logger "github.com/fawrince/eventrecord/logger"
+	prometheus2 "github.com/fawrince/eventrecord/prometheus"
 	"github.com/gorilla/mux"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"io/ioutil"
 	"net/http"
 	"time"
@@ -67,8 +69,14 @@ func (server *Server) mapHandlers(router *mux.Router) {
 	router.HandleFunc("/", server.indexHandler)
 	router.HandleFunc("/send", server.pushCoordinatesHandler).Methods("POST")
 	router.HandleFunc("/recv", server.pullCoordinatesHandler).Methods("GET")
-	router.PathPrefix("/static").Handler(http.FileServer(http.Dir("./static")))
+
+	router.PathPrefix("/static/").Handler(http.StripPrefix("/static/", http.FileServer(http.Dir("./static/"))))
+
+	// Prometheus endpoint
+	router.Path("/prometheus").Handler(promhttp.Handler())
+
 	router.Use(server.buildMiddleware())
+	router.Use(prometheus2.PrometheusMiddleware)
 }
 
 func (server *Server) buildMiddleware() mux.MiddlewareFunc {
@@ -92,7 +100,7 @@ func (server *Server) indexHandler(w http.ResponseWriter, r *http.Request) {
 
 // pushCoordinatesHandler receives a new coordinates data from the client and produces a message to the broker
 func (server *Server) pushCoordinatesHandler(w http.ResponseWriter, r *http.Request) {
-	var coordinates broker.Coordinates
+	var coordinates dto.Coordinates
 	err := json.NewDecoder(r.Body).Decode(&coordinates)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)

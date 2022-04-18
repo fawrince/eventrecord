@@ -1,0 +1,17 @@
+syntax = "proto3";
+option go_package = "./grpc";
+
+service CoordinateTransporter {
+  rpc PostCoordinates(stream PostCoordinateRequest) returns (stream PostCoordinateResponse) {}
+}
+
+message PostCoordinateRequest {
+  int32 x = 1;
+  int32 y = 2;
+  string client_id = 3;
+}
+
+message PostCoordinateResponse {
+  bool ok = 1;
+}
+

@@ -2,23 +2,24 @@ package application
 
 import (
 	"github.com/fawrince/eventrecord/broker"
+	"github.com/fawrince/eventrecord/dto"
 	"github.com/fawrince/eventrecord/logger"
 	"os"
 	"time"
 )
 
 type ProduceHandler interface {
-	ProduceInput() chan<- broker.Coordinates
+	ProduceInput() chan<- dto.Coordinates
+	Stop()
 }
 
 type ConsumeHandler interface {
-	ConsumeOutput() <-chan broker.Coordinates
+	ConsumeOutput() <-chan dto.Coordinates
+	Stop()
 }
 
 type App struct {
 	logger   *logger.Logger
-	producer *broker.Producer
-	consumer *broker.Consumer
 	Produce  ProduceHandler
 	Consume  ConsumeHandler
 }
@@ -43,9 +44,6 @@ func (app *App) Setup(sigterm chan os.Signal, sigusr1 chan os.Signal) {
 	consumer := broker.NewConsumer(logger)
 	consumer.Start(sigterm, sigusr1)
 
-	app.producer = producer
-	app.consumer = consumer
-
 	app.Produce = producer
 	app.Consume = consumer
 }
@@ -53,8 +51,8 @@ func (app *App) Setup(sigterm chan os.Signal, sigusr1 chan os.Signal) {
 func (app *App) Stop() {
 	logger := app.logger
 
-	app.producer.Stop()
-	app.consumer.Stop()
+	app.Produce.Stop()
+	app.Consume.Stop()
 
 	logger.Infof("Application stopped")
 }

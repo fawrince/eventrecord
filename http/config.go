@@ -1,8 +1,9 @@
 package http
 
-import "flag"
+import (
+	"flag"
+)
 
-// Http server configuration option
 var (
 	Port = ""
 )

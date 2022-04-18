@@ -3,14 +3,16 @@ package broker
 import (
 	"encoding/json"
 	"github.com/Shopify/sarama"
+	"github.com/fawrince/eventrecord/dto"
 	"github.com/fawrince/eventrecord/logger"
 )
 
 type Producer struct {
-	logger   *logger.Logger
-	producer sarama.AsyncProducer
-	address  string
-	topic    string
+	logger    *logger.Logger
+	producer  sarama.AsyncProducer
+	address   string
+	topic     string
+	produceCh chan<- dto.Coordinates
 }
 
 func NewProducer(logger *logger.Logger, address string, topic string) *Producer {
@@ -23,21 +25,8 @@ func NewProducer(logger *logger.Logger, address string, topic string) *Producer 
 }
 
 // ProduceInput returns the pipelined-channel to produce coordinates
-func (prod *Producer) ProduceInput() chan<- Coordinates {
-	ch := make(chan Coordinates, 100)
-	go func() {
-		for coordinates := range ch {
-			data, _ := json.Marshal(coordinates)
-			message := &sarama.ProducerMessage{
-				Topic: prod.topic,
-				Key:   sarama.StringEncoder(coordinates.Client),
-				Value: sarama.ByteEncoder(data),
-			}
-			prod.producer.Input() <- message
-			prod.logger.Tracef("Message produced: %v", coordinates)
-		}
-	}()
-	return ch
+func (prod *Producer) ProduceInput() chan<- dto.Coordinates {
+	return prod.produceCh
 }
 
 func (prod *Producer) Start() {
@@ -71,6 +60,21 @@ func (prod *Producer) Start() {
 		}
 		prod.logger.Infof("Producer stopped with %d errors", errors)
 	}()
+
+	produceCh := make(chan dto.Coordinates, 100)
+	go func() {
+		for coordinates := range produceCh {
+			data, _ := json.Marshal(coordinates)
+			message := &sarama.ProducerMessage{
+				Topic: prod.topic,
+				Key:   sarama.StringEncoder(coordinates.Client),
+				Value: sarama.ByteEncoder(data),
+			}
+			prod.producer.Input() <- message
+			prod.logger.Tracef("Message produced: %v", coordinates)
+		}
+	}()
+	prod.produceCh = produceCh
 }
 
 func (prod *Producer) Stop() {

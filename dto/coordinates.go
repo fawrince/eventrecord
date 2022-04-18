@@ -1,4 +1,4 @@
-package broker
+package dto
 
 import "encoding/json"
 

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/Shopify/sarama"
+	"github.com/fawrince/eventrecord/dto"
 	"github.com/fawrince/eventrecord/logger"
 	"log"
 	"os"
@@ -17,7 +18,7 @@ type Consumer struct {
 	ready  chan bool
 	close  chan bool
 	logger *logger.Logger
-	output chan Coordinates
+	output chan dto.Coordinates
 }
 
 func NewConsumer(logger *logger.Logger) *Consumer {
@@ -25,12 +26,12 @@ func NewConsumer(logger *logger.Logger) *Consumer {
 		logger: logger,
 		ready:  make(chan bool),
 		close:  make(chan bool),
-		output: make(chan Coordinates, 100),
+		output: make(chan dto.Coordinates, 100),
 	}
 }
 
 // ConsumeOutput returns the pipelined-channel to consume coordinates
-func (consumer *Consumer) ConsumeOutput() <-chan Coordinates {
+func (consumer *Consumer) ConsumeOutput() <-chan dto.Coordinates {
 	return consumer.output
 }
 
@@ -149,7 +150,7 @@ func (consumer *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, clai
 	// The `ConsumeClaim` itself is called within a goroutine, see:
 	// https://github.com/Shopify/sarama/blob/main/consumer_group.go#L27-L29
 	for message := range claim.Messages() {
-		var coord Coordinates
+		var coord dto.Coordinates
 		json.Unmarshal(message.Value, &coord)
 		consumer.logger.Infof("Message claimed: value = %v (%v), timestamp = %v, topic = %s",
 			coord, message.Value, message.Timestamp, message.Topic)
