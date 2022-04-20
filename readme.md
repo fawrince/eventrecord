@@ -8,18 +8,18 @@
 # How to run
 1. docker build --tag eventrecord-server:1.0.0 -f Dockerfile-server .
 2. docker-compose up
-3. 
+
 localhost:1001 - Web Server\
 localhost:3000 - Grafana \
 localhost:9090 - Prometheus \
-localhost:5601 - Kibana \
+localhost:5601 - Kibana 
 
 # Components used
-github.com/Shopify/sarama - go client for Kafka
-github.com/gofiber/fiber/v2 - fast webserver based on fasthttp
-github.com/prometheus/client_golang - go client for prometheus
-github.com/sirupsen/logrus - well-known logger
-google.golang.org/grpc - grpc
+github.com/Shopify/sarama - go client for Kafka\
+github.com/gofiber/fiber/v2 - fast webserver based on fasthttp\
+github.com/prometheus/client_golang - go client for prometheus\
+github.com/sirupsen/logrus - well-known logger\
+google.golang.org/grpc - grpc\
 google.golang.org/protobuf - protobuf
 
 # Hints
