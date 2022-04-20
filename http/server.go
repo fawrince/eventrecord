@@ -7,8 +7,7 @@ import (
 	"fmt"
 	"github.com/fawrince/eventrecord/application"
 	"github.com/fawrince/eventrecord/dto"
-	logger "github.com/fawrince/eventrecord/logger"
-	prometheus2 "github.com/fawrince/eventrecord/prometheus"
+	"github.com/fawrince/eventrecord/logger"
 	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"io/ioutil"
@@ -16,13 +15,13 @@ import (
 	"time"
 )
 
-type Server struct {
+type ServerNetHttp struct {
 	logger      *logger.Logger
 	server      *http.Server
 	application *application.App
 }
 
-func NewServer(logger *logger.Logger, app *application.App) *Server {
+func NewServer(logger *logger.Logger, app *application.App) *ServerNetHttp {
 	router := mux.NewRouter()
 
 	srv := &http.Server{
@@ -30,14 +29,14 @@ func NewServer(logger *logger.Logger, app *application.App) *Server {
 		Handler: router,
 	}
 
-	return &Server{
+	return &ServerNetHttp{
 		logger:      logger,
 		server:      srv,
 		application: app,
 	}
 }
 
-func (server *Server) Start() {
+func (server *ServerNetHttp) Start() {
 	server.logger.Infof("Starting the http server at address: %s...", server.server.Addr)
 
 	server.mapHandlers(server.server.Handler.(*mux.Router))
@@ -45,14 +44,14 @@ func (server *Server) Start() {
 	go func() {
 		err := server.server.ListenAndServe()
 		if err != nil && err != http.ErrServerClosed {
-			server.logger.Fatal("goerr", err, fmt.Sprintf("Couldnt start the http server: %s", err))
+			server.logger.Fatal(fmt.Errorf("couldnt start the http server: %w", err))
 		}
 	}()
 
 	server.logger.Infof("Server started")
 }
 
-func (server *Server) Stop() {
+func (server *ServerNetHttp) Stop() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
 	defer func() {
 		// extra handling here
@@ -60,12 +59,12 @@ func (server *Server) Stop() {
 	}()
 
 	if err := server.server.Shutdown(ctx); err != nil {
-		server.logger.Fatal("goerr", err, "Server shutdown failed:%+v", err)
+		server.logger.Fatal(fmt.Errorf("server shutdown failed: %w", err))
 	}
 	server.logger.Infof("Server stopped")
 }
 
-func (server *Server) mapHandlers(router *mux.Router) {
+func (server *ServerNetHttp) mapHandlers(router *mux.Router) {
 	router.HandleFunc("/", server.indexHandler)
 	router.HandleFunc("/send", server.pushCoordinatesHandler).Methods("POST")
 	router.HandleFunc("/recv", server.pullCoordinatesHandler).Methods("GET")
@@ -76,19 +75,19 @@ func (server *Server) mapHandlers(router *mux.Router) {
 	router.Path("/prometheus").Handler(promhttp.Handler())
 
 	router.Use(server.buildMiddleware())
-	router.Use(prometheus2.PrometheusMiddleware)
+	//router.Use(monitor.PrometheusMiddleware)
 }
 
-func (server *Server) buildMiddleware() mux.MiddlewareFunc {
+func (server *ServerNetHttp) buildMiddleware() mux.MiddlewareFunc {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			server.logger.Trace("url", r.RequestURI, "Request intercepted")
+			server.logger.Tracef("Request intercepted: %s", r.RequestURI)
 			next.ServeHTTP(w, r)
 		})
 	}
 }
 
-func (server *Server) indexHandler(w http.ResponseWriter, r *http.Request) {
+func (server *ServerNetHttp) indexHandler(w http.ResponseWriter, r *http.Request) {
 	fileBytes, err := ioutil.ReadFile("static/index.html")
 	if err != nil {
 		panic(err)
@@ -99,7 +98,7 @@ func (server *Server) indexHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // pushCoordinatesHandler receives a new coordinates data from the client and produces a message to the broker
-func (server *Server) pushCoordinatesHandler(w http.ResponseWriter, r *http.Request) {
+func (server *ServerNetHttp) pushCoordinatesHandler(w http.ResponseWriter, r *http.Request) {
 	var coordinates dto.Coordinates
 	err := json.NewDecoder(r.Body).Decode(&coordinates)
 	if err != nil {
@@ -114,7 +113,7 @@ func (server *Server) pushCoordinatesHandler(w http.ResponseWriter, r *http.Requ
 }
 
 // pullCoordinatesHandler sends consumed coordinates over long living server-sent-events connection
-func (server *Server) pullCoordinatesHandler(w http.ResponseWriter, r *http.Request) {
+func (server *ServerNetHttp) pullCoordinatesHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 	w.Header().Set("Content-Type", "text/event-stream")

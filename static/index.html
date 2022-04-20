@@ -3,7 +3,6 @@
 <head>
     <meta charset="UTF-8">
     <title>Event recording</title>
-    <script src="/static/js/grpc/main.js"></script>
     <style>
         .pointer {
             position: absolute;
@@ -17,6 +16,7 @@
         var consumeMode = false;
         var produceMode = false;
         var consumeSource = undefined;
+        var producePoint = undefined;
 
         var tabID = sessionStorage.tabID
             ? sessionStorage.tabID
@@ -49,6 +49,17 @@
                 client: tabID.toString()
             };
 
+            produceCoordinate(data);
+        }
+
+        /**
+         * Sends coordinates item via WebSocket endpoint.
+         * @param coord
+         */
+        function produceCoordinate(coord) {
+            producePoint.send(JSON.stringify(coord));
+
+            /* http post
             fetch('/send', {
                 method: 'POST',
                 headers: {
@@ -58,7 +69,32 @@
             }).then(function (response) {
                 let result = response.json();
                 //console.log(result);
-            });
+            });*/
+        }
+
+        /**
+         * Opens WebSocket connection to produce coordinates.
+         */
+        function openProducePoint() {
+            producePoint = new WebSocket("ws://localhost:1001/ws/send");
+
+            producePoint.onopen = function (e) {
+                console.log('WebSocket connection opened');
+            };
+
+            producePoint.onclose = function (e) {
+                console.log('WebSocket connection closed clean?', e.wasClean);
+            };
+        }
+
+        /**
+         * Closes WebSocket connection.
+         */
+        function closeProducePoint() {
+            if (producePoint) {
+                producePoint.close();
+                producePoint = undefined;
+            }
         }
 
         /**
@@ -66,13 +102,13 @@
          */
         function closeConsumeSource() {
             if (consumeSource) {
-                consumeSource.close()
+                consumeSource.close();
                 consumeSource = undefined;
             }
         }
 
         /**
-         * Opens SSE connection to consume tracked events.
+         * Opens SSE connection to consume tracked events from the server.
          */
         function openConsumeSource() {
             consumeSource = new EventSource('/recv')
@@ -87,6 +123,7 @@
             consumeMode = true;
             produceMode = false;
 
+            closeProducePoint();
             closeConsumeSource();
             openConsumeSource();
 
@@ -98,6 +135,7 @@
             produceMode = true;
 
             closeConsumeSource();
+            openProducePoint();
 
             document.getElementById('trackHint').style.display = 'inline';
         }

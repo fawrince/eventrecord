@@ -1,3 +1,5 @@
+// Package broker contains the wrapper/implementation of the message broker and
+// provides an abstraction for Coordinates producing and consuming through channels.
 package broker
 
 import "flag"

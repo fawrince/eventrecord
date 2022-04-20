@@ -1,11 +1,18 @@
 # What is this about
 1. Client application records the mouse movement from the screen
-2. Send coordinates to the web server over http
-3. Server-side emits a kafka message with coordinates to the topic specified on container startup
-4. When replay recording requested (via button) - sends coordinates to the client over sse-connection
-5. Replays mouse movement history on the screen
+2. Sends coordinate to the server over WebSocket connection
+3. Server emits a kafka message with coordinates to the topic specified on container startup
+4. When replay recording requested (via button) - server sends coordinates to the client over sse-connection
+5. Client replays mouse movement history on the screen
 
-# Prompts
+# How to run
+docker build --tag eventrecord-server:1.0.0 -f Dockerfile-server .
+docker-compose up
+
+# Packages used
+github.com/gofiber/fiber/v2
+
+# Hints
 ### build docker image
 docker build --tag eventrecord-server:1.0.0 -f Dockerfile-server .
 
@@ -32,16 +39,3 @@ eventrecord-server-service.yaml,eventrecord-server-deployment.yaml
 protoc --go_out=. --go_opt=paths=source_relative \
 --go-grpc_out=. --go-grpc_opt=paths=source_relative \
 grpc/coordinate_transporter.proto
-
-protoc --js_out=library=grpc/coordinate_transporter,binary:static/js \
-grpc/coordinate_transporter.proto
-
-protoc \
---grpc-web_out=import_style=commonjs,mode=grpcweb:static/js \
---js_out=import_style=commonjs,binary:static/js \
-grpc/coordinate_transporter.proto
-
-### run browserify to 
-npx browserify static/js/grpc/coordinate_transporter_pb.js -o ct_pb.js
-npx browserify static/js/grpc/coordinate_transporter_grpc_web_pb.js -o ct_web_pb.js
-

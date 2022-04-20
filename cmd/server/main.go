@@ -33,7 +33,7 @@ func main() {
 	app := application.NewApp(logger)
 	app.Setup(sigterm, sigusr1)
 
-	srv := http.NewServer(logger, app)
+	srv := http.NewServer2(logger, app)
 	srv.Start()
 
 	grpc := grpc.NewCoordinateTransporterServer(app.Produce, logger)

@@ -44,7 +44,7 @@ func (consumer *Consumer) Start(sigterm chan os.Signal, sigusr1 chan os.Signal) 
 
 	version, err := sarama.ParseKafkaVersion(Version)
 	if err != nil {
-		consumer.logger.Fatal("Error parsing Kafka version: %v", err)
+		consumer.logger.Fatal(fmt.Errorf("error parsing Kafka version: %w", err))
 	}
 
 	config := sarama.NewConfig()
@@ -55,7 +55,7 @@ func (consumer *Consumer) Start(sigterm chan os.Signal, sigusr1 chan os.Signal) 
 	ctx, cancel := context.WithCancel(context.Background())
 	client, err := sarama.NewConsumerGroup(strings.Split(Brokers, ","), Group, config)
 	if err != nil {
-		consumer.logger.Fatal(fmt.Sprintf("Error creating consumer group client: %v", err))
+		consumer.logger.Fatal(fmt.Errorf("error creating consumer group client: %w", err))
 	}
 
 	wg := &sync.WaitGroup{}
@@ -67,7 +67,7 @@ func (consumer *Consumer) Start(sigterm chan os.Signal, sigusr1 chan os.Signal) 
 			// server-side rebalance happens, the consumer session will need to be
 			// recreated to get the new claims
 			if err := client.Consume(ctx, strings.Split(Topics, ","), consumer); err != nil {
-				consumer.logger.Fatal(fmt.Sprintf("Error from consumer: %v", err))
+				consumer.logger.Fatal(fmt.Errorf("error from consumer: %w", err))
 			}
 			// check if context was cancelled, signaling that the consumer should stop
 			if ctx.Err() != nil {
@@ -114,7 +114,7 @@ func (consumer *Consumer) Stop() {
 	consumer.close <- true
 
 	if err := consumer.client.Close(); err != nil {
-		consumer.logger.Fatal(fmt.Sprintf("Error closing client: %v", err))
+		consumer.logger.Fatal(fmt.Errorf("error closing client: %w", err))
 	}
 	consumer.logger.Infof("Consumer is successfully closed")
 }
@@ -152,8 +152,7 @@ func (consumer *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, clai
 	for message := range claim.Messages() {
 		var coord dto.Coordinates
 		json.Unmarshal(message.Value, &coord)
-		consumer.logger.Infof("Message claimed: value = %v (%v), timestamp = %v, topic = %s",
-			coord, message.Value, message.Timestamp, message.Topic)
+		consumer.logger.Infof("Message claimed: value = %v, timestamp = %v, topic = %s", coord, message.Timestamp, message.Topic)
 		consumer.output <- coord
 		session.MarkMessage(message, "")
 	}
