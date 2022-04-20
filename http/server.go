@@ -1,140 +1,149 @@
 package http
 
 import (
+	"bufio"
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/ansrivas/fiberprometheus/v2"
 	"github.com/fawrince/eventrecord/application"
 	"github.com/fawrince/eventrecord/dto"
 	"github.com/fawrince/eventrecord/logger"
-	"github.com/gorilla/mux"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"io/ioutil"
-	"net/http"
+	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/websocket/v2"
 	"time"
 )
 
-type ServerNetHttp struct {
+type Server struct {
 	logger      *logger.Logger
-	server      *http.Server
+	server      *fiber.App
 	application *application.App
 }
 
-func NewServer(logger *logger.Logger, app *application.App) *ServerNetHttp {
-	router := mux.NewRouter()
+func NewServer2(logger *logger.Logger, app *application.App) *Server {
+	server := fiber.New()
 
-	srv := &http.Server{
-		Addr:    fmt.Sprintf(":%s", Port),
-		Handler: router,
-	}
-
-	return &ServerNetHttp{
+	return &Server{
 		logger:      logger,
-		server:      srv,
+		server:      server,
 		application: app,
 	}
 }
 
-func (server *ServerNetHttp) Start() {
-	server.logger.Infof("Starting the http server at address: %s...", server.server.Addr)
+func (server *Server) Start() {
+	server.logger.Infof("Starting the http server at address: :%s...", Port)
 
-	server.mapHandlers(server.server.Handler.(*mux.Router))
+	server.mapHandlers()
 
 	go func() {
-		err := server.server.ListenAndServe()
-		if err != nil && err != http.ErrServerClosed {
-			server.logger.Fatal(fmt.Errorf("couldnt start the http server: %w", err))
+		err := server.server.Listen(fmt.Sprintf(":%s", Port))
+		if err != nil {
+			server.logger.Fatal(err)
 		}
 	}()
 
 	server.logger.Infof("Server started")
 }
 
-func (server *ServerNetHttp) Stop() {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
-	defer func() {
-		// extra handling here
-		cancel()
-	}()
-
-	if err := server.server.Shutdown(ctx); err != nil {
-		server.logger.Fatal(fmt.Errorf("server shutdown failed: %w", err))
-	}
-	server.logger.Infof("Server stopped")
+func (server *Server) Stop() {
+	server.server.Shutdown()
 }
 
-func (server *ServerNetHttp) mapHandlers(router *mux.Router) {
-	router.HandleFunc("/", server.indexHandler)
-	router.HandleFunc("/send", server.pushCoordinatesHandler).Methods("POST")
-	router.HandleFunc("/recv", server.pullCoordinatesHandler).Methods("GET")
+func (server *Server) mapHandlers() {
+	srv := server.server
 
-	router.PathPrefix("/static/").Handler(http.StripPrefix("/static/", http.FileServer(http.Dir("./static/"))))
+	srv.Use(func(c *fiber.Ctx) error {
+		server.logger.Tracef("Request intercepted: %s", c.OriginalURL())
+		return c.Next()
+	})
 
-	// Prometheus endpoint
-	router.Path("/prometheus").Handler(promhttp.Handler())
-
-	router.Use(server.buildMiddleware())
-	//router.Use(monitor.PrometheusMiddleware)
-}
-
-func (server *ServerNetHttp) buildMiddleware() mux.MiddlewareFunc {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			server.logger.Tracef("Request intercepted: %s", r.RequestURI)
-			next.ServeHTTP(w, r)
-		})
-	}
-}
-
-func (server *ServerNetHttp) indexHandler(w http.ResponseWriter, r *http.Request) {
-	fileBytes, err := ioutil.ReadFile("static/index.html")
-	if err != nil {
-		panic(err)
-	}
-	w.WriteHeader(http.StatusOK)
-	w.Header().Set("Content-Type", "text/html")
-	w.Write(fileBytes)
-}
-
-// pushCoordinatesHandler receives a new coordinates data from the client and produces a message to the broker
-func (server *ServerNetHttp) pushCoordinatesHandler(w http.ResponseWriter, r *http.Request) {
-	var coordinates dto.Coordinates
-	err := json.NewDecoder(r.Body).Decode(&coordinates)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	server.application.Produce.ProduceInput() <- coordinates
-
-	w.Header().Set("Content-Type", "application/json")
-	w.Write([]byte("{ \"message\": \"ok\"}"))
-}
-
-// pullCoordinatesHandler sends consumed coordinates over long living server-sent-events connection
-func (server *ServerNetHttp) pullCoordinatesHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-
-	for {
-		select {
-		case <-r.Context().Done():
-			server.logger.Infof("SSE connection closed")
-			return
-		case coord := <-server.application.Consume.ConsumeOutput():
-			time.Sleep(time.Millisecond * 10)
-			var buf bytes.Buffer
-			enc := json.NewEncoder(&buf)
-			enc.Encode(coord)
-			fmt.Fprintf(w, "data: %v\n\n", buf.String())
-			if f, ok := w.(http.Flusher); ok {
-				f.Flush()
-			}
-			server.logger.Infof("Data sent to SSE response: %v", coord)
+	srv.Use("/ws", func(c *fiber.Ctx) error {
+		// IsWebSocketUpgrade returns true if the client
+		// requested upgrade to the WebSocket protocol.
+		if websocket.IsWebSocketUpgrade(c) {
+			server.logger.Infof("WebSocket upgrade requested")
+			return c.Next()
 		}
+		return fiber.ErrUpgradeRequired
+	})
+
+	server.registerPrometheusHandler()
+
+	srv.Static("/", "./static/index.html")
+	srv.Get("/ws/:client", server.buildPushCoordinatesSocketHandler())
+	srv.Get("/recv", server.buildPullCoordinatesHandler())
+}
+
+// buildPushCoordinatesSocketHandler receives the coordinates from the client via WebSocket-connection and produces a message to the broker.
+func (server *Server) buildPushCoordinatesSocketHandler() func(c *fiber.Ctx) error {
+	return websocket.New(func(c *websocket.Conn) {
+		defer func() {
+			c.Close()
+		}()
+
+		var (
+			mt  int
+			msg []byte
+			err error
+		)
+		for {
+			if mt, msg, err = c.ReadMessage(); err != nil {
+				if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+					server.logger.Error(err)
+				}
+				return // Calls the deferred function, i.e. closes the connection on error
+			}
+
+			if mt == websocket.TextMessage {
+				var coordinates dto.Coordinates
+				if err := json.Unmarshal(msg, &coordinates); err != nil {
+					server.logger.Error(err)
+				}
+				server.application.Produce.ProduceInput() <- coordinates
+			} else {
+				server.logger.Infof("WebSocket message received of type %v", mt)
+			}
+		}
+	})
+}
+
+// buildPullCoordinatesHandler consumes events from the broker and sends it the client via SSE.
+func (server *Server) buildPullCoordinatesHandler() func(c *fiber.Ctx) error {
+	return func(c *fiber.Ctx) error {
+		c.Set("Content-Type", "text/event-stream")
+		c.Set("Cache-Control", "no-cache")
+		c.Set("Connection", "keep-alive")
+		c.Set("Transfer-Encoding", "chunked")
+
+		doneCh := c.Context().Done()
+
+		c.Context().SetBodyStreamWriter(func(w *bufio.Writer) {
+			for {
+				select {
+				case <-doneCh:
+					server.logger.Infof("Sse connection closed...")
+					return
+
+				case coord := <-server.application.Consume.ConsumeOutput():
+					time.Sleep(time.Millisecond * 10)
+					var buf bytes.Buffer
+					enc := json.NewEncoder(&buf)
+					enc.Encode(coord)
+					fmt.Fprintf(w, "data: %v\n\n", buf.String())
+					if err := w.Flush(); err != nil {
+						server.logger.Infof("Sse connection closed (err)...")
+						return
+					}
+				}
+			}
+		})
+
+		return nil
 	}
+}
+
+func (server *Server) registerPrometheusHandler() {
+	prometheus := fiberprometheus.New("event-record")
+	prometheus.RegisterAt(server.server, "/prometheus")
+	server.server.Use(prometheus.Middleware)
 }
